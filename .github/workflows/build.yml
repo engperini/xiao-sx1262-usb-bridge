@@ -1,0 +1,56 @@
+name: Build firmware
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  firmware:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        board: [xiao_nrf52840]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build tools
+        run: pip install adafruit-nrfutil
+
+      - uses: arduino/setup-arduino-cli@v2
+
+      - name: Build
+        run: scripts/build.sh ${{ matrix.board }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xiao-sx1262-usb-bridge-${{ matrix.board }}
+          path: build/*.uf2
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/*.uf2
+
+  host-tools:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Lint
+        run: |
+          pip install pyserial pyflakes
+          python -m pyflakes tools
+          python -m py_compile tools/*.py
